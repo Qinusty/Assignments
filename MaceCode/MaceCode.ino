@@ -45,7 +45,7 @@ const String Mace_Asterix = "$$$";
 const String Mace_Divide = "$^$";
 const String Mace_Equals = "$===$";
 
-//#define DEBUG
+#define DEBUG
 //////////////// defining pins
 #define RED_LED 5
 #define AMBER_LED 6
@@ -77,56 +77,83 @@ void loop() {
 #ifdef DEBUG
   Serial.println("Got Input");
 #endif
+  // Filter for MACE characters
   if (input.charAt(0) == '$' || input.charAt(0) == '^' || input.charAt(0) == '=')
   {
-    // If Recieved MACE
+    // prints the ascii translation and takes appropriate action based on the MACE entered
     respondToMace(input);
+    sendDigital(BLUE_LED, input); // send data over blue LED
   }
   else
   {
-    // If not recieved MACE
+    // If not recieved MACE - Send red LED
     String mace = stringToMace(input);
 #ifdef DEBUG
     Serial.println("Converted to MACE");
 #endif
     Serial.println(mace);
-    sendDigital(11, mace);
+    sendDigital(RED_LED, mace);
   }
 }
+
 void respondToMace(String mace)
 {
   String convertedMace = maceToString(mace);
+  // Print the converted mace
+  Serial.println(convertedMace);
+
 #ifdef DEBUG
   Serial.println("Responding to MACE");
 #endif
 
-  if (mace.startsWith("LP"))
+  if (convertedMace.startsWith("LP"))
   {
-#ifdef DEBUG
-    Serial.println("LP");
-#endif
-    for (int i = 2; i < convertedMace.length(); i += 3)
+    // Check all are decimal digits
+    String remainder = convertedMace.substring(2);
+    bool validData = true; // Changed to false if any checks are failed
+    if (remainder.length() != 12)
     {
-      // get the block of data
-      String block = convertedMace.substring(i, i + 2);
-      int pwmValue = block.toInt();
-      switch (i)
+      validData = false;
+    }
+    for (int i = 0; i < remainder.length(); i++)
+    {
+      Serial.println(remainder[i]);
+      if (!isdigit(remainder[i]))
       {
-        case 2:
-          analogWrite(RED_LED, pwmValue);
-          break;
-        case 5:
-          analogWrite(AMBER_LED, pwmValue);
-          break;
-        case 8:
-          analogWrite(YELLOW_LED, pwmValue);
-          break;
-        case 11:
-          analogWrite(GREEN_LED, pwmValue);
-          break;
-        default:
-          ;
-          break;
+        validData = false;
+      }
+    }
+    if (validData)
+    {
+#ifdef DEBUG
+      Serial.println("LP");
+#endif
+      // index i starts at 2 to avoid 'L' and 'P' and increments by 3 each time to jump over each block of 3 numbers.
+      // e.g. 'LP' '123' '234' '213' '241'
+      for (int i = 2; i < convertedMace.length(); i += 3)
+      {
+        // get the block of data (3 characters)
+        String block = convertedMace.substring(i, i + 2);
+        // converts the 3 digit block to an integer
+        int pwmValue = block.toInt();
+        switch (i)
+        {
+          case 2: // first block
+            analogWrite(RED_LED, pwmValue);
+            break;
+          case 5: // second block
+            analogWrite(AMBER_LED, pwmValue);
+            break;
+          case 8: // third block
+            analogWrite(YELLOW_LED, pwmValue);
+            break;
+          case 11: // fourth and final block
+            analogWrite(GREEN_LED, pwmValue);
+            break;
+          default:
+            ;
+            break;
+        }
       }
     }
   }
@@ -160,17 +187,15 @@ void respondToMace(String mace)
     Serial.println("VRV");
 #endif
     String inVal = String(analogRead(POT), DEC);
-
     // While length < 4 add a 0 to the start of the string
     while (inVal.length() < 4)
     {
-      String zero = "0";
       inVal = "0" + inVal;
     }
     Serial.println(stringToMace(inVal));
-
   }
 }
+
 String getASCIIInput()
 {
   String retVal = "";
@@ -195,34 +220,51 @@ String stringToMace(String s)
   for (int i = 0; i < s.length(); i++)
   {
     retVal += charToMace(s.charAt(i));
-    retVal += '/';
+    if (s.charAt(i) != ' ' && s.charAt(i + 1) != ' ')
+    {
+      // Seperates characters with a /
+      retVal += '/';
+    }
   }
   return retVal;
 }
 
 String maceToString(String s)
 {
+#ifdef DEBUG
+  Serial.println("Starting conversion from mace to string.");
+#endif
   int startIndex = 0;
   String retVal = "";
+  String tempChar;
   int endIndex = 0;
-  // Loop until no more slashes are found, indexOf() returns -1 when no more of that character remain.
-  while (endIndex != -1)
-  {
-    endIndex = s.indexOf('/', startIndex + 1);
 
-    //Serial.print("BreakPoint: "); Serial.println(endIndex);
-    // Get the substring between the two slashes
-    String sstring = s.substring(startIndex, endIndex);
-    // Remove remaining slashes
-    sstring.replace("/", "");
-    char maceChar = maceToChar(sstring);
-    retVal = retVal + maceChar;
-    startIndex = endIndex;
+  for (int i = 0; i < s.length(); i++)
+  {
+    if (s[i] == '/' || s[i] == ' ')
+    {
+      retVal += maceToChar(tempChar);
+      if (s[i] == ' ')
+      {
+        retVal += ' ';
+      }
+      tempChar = "";
+    }
+    else if (s[i] == '$' || s[i] == '^' || s[i] == '=')
+    {
+      tempChar += s[i];
+    }
+  }
+  if (tempChar != "")
+  {
+    retVal += maceToChar(tempChar);
   }
   return retVal;
 }
+
 void sendDigital(int pin, String message)
 {
+  // Default unit for delays in milliseconds.
   int timeUnit;
   // timeUnit has a base value of 20 and has the potentiometer value modified to make up the remaining 480 to a maximum of 500.
   timeUnit = 20 + (analogRead(POT) * (float(480) / float(1023)));
@@ -264,7 +306,7 @@ void sendDigital(int pin, String message)
 
 //////////////////////////////////////// LONG CONVERSIONS ///////////////////////////////////////////////////////////////////////////////
 
-
+/// Converts an ascii character (converted to lowercase) to the MACE translation
 String charToMace(char c)
 {
   switch (tolower(c))
@@ -413,6 +455,7 @@ String charToMace(char c)
   }
 }
 
+/// Converts a MACE string to an ascii character
 char maceToChar(String mace)
 {
   if (mace == Mace_A)
