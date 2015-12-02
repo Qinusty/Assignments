@@ -45,7 +45,7 @@ const String Mace_Asterix = "$$$";
 const String Mace_Divide = "$^$";
 const String Mace_Equals = "$===$";
 
-#define DEBUG
+//#define DEBUG
 //////////////// defining pins
 #define RED_LED 5
 #define AMBER_LED 6
@@ -55,6 +55,7 @@ const String Mace_Equals = "$===$";
 #define IR_LED A1
 #define IR_REC 2
 #define POT 0
+#define IR_FREQ 38000
 
 void setup() {
   // put your setup code here, to run once:
@@ -92,7 +93,7 @@ void loop() {
     Serial.println("Converted to MACE");
 #endif
     Serial.println(mace);
-    sendDigital(RED_LED, mace);
+    sendDigital(RED_LED, mace); // send data over RED LED
   }
 }
 
@@ -162,9 +163,9 @@ void respondToMace(String mace)
 #ifdef DEBUG
     Serial.println("+-IR");
 #endif
-    digitalWrite(IR_LED, HIGH);
+    tone(IR_LED, IR_FREQ);
     delay(1000);
-    digitalWrite(IR_LED, LOW);
+    noTone(IR_LED);
   }
   else if (convertedMace.startsWith("RXIR"))
   {
@@ -172,13 +173,13 @@ void respondToMace(String mace)
     Serial.println("RXIR");
 #endif
     int inVal = digitalRead(IR_REC);
-    if (inVal)
+    if (inVal == HIGH)
     {
-      Serial.println("LOW");
+      Serial.println("HIGH");
     }
     else
     {
-      Serial.println("HIGH");
+      Serial.println("LOW");
     }
   }
   else if (convertedMace.startsWith("VRV"))
@@ -190,6 +191,7 @@ void respondToMace(String mace)
     // While length < 4 add a 0 to the start of the string
     while (inVal.length() < 4)
     {
+      // add a 0 to the start of the string until there are 4 digits in the string.
       inVal = "0" + inVal;
     }
     Serial.println(stringToMace(inVal));
@@ -216,11 +218,14 @@ String getASCIIInput()
 
 String stringToMace(String s)
 {
+#ifdef DEBUG
+  Serial.println("Starting conversion from string to Mace.");
+#endif
   String retVal = "";
   for (int i = 0; i < s.length(); i++)
   {
     retVal += charToMace(s.charAt(i));
-    if (s.charAt(i) != ' ' && s.charAt(i + 1) != ' ')
+    if (s.charAt(i) != ' ' && s.charAt(i + 1) != ' ') // check for spaces in the current index and the next character.
     {
       // Seperates characters with a /
       retVal += '/';
@@ -241,22 +246,27 @@ String maceToString(String s)
 
   for (int i = 0; i < s.length(); i++)
   {
-    if (s[i] == '/' || s[i] == ' ')
+    if (s[i] == '/' || s[i] == ' ') // if the current index is a / or a space
     {
+      // convert the data in tempChar to an ascii character and add it to retVal.
       retVal += maceToChar(tempChar);
       if (s[i] == ' ')
       {
+        // if its a space then add a space to retval too
         retVal += ' ';
       }
+      // clear tempChar
       tempChar = "";
     }
-    else if (s[i] == '$' || s[i] == '^' || s[i] == '=')
+    else if (s[i] == '$' || s[i] == '^' || s[i] == '=') // if mace character detected
     {
+      // add the character at the current index to the tempChar string
       tempChar += s[i];
     }
   }
-  if (tempChar != "")
+  if (tempChar != "") // if there is anything left in tempChar
   {
+    // translate tempChar and append it to retVal
     retVal += maceToChar(tempChar);
   }
   return retVal;
@@ -264,6 +274,10 @@ String maceToString(String s)
 
 void sendDigital(int pin, String message)
 {
+#ifdef DEBUG
+  Serial.print("Starting to send data over digital. message: ");
+  Serial.println(message);
+#endif
   // Default unit for delays in milliseconds.
   int timeUnit;
   // timeUnit has a base value of 20 and has the potentiometer value modified to make up the remaining 480 to a maximum of 500.
